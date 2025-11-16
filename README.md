@@ -6,7 +6,7 @@ It's a dashboard to view and analyze stock data with Python backend and interact
 ## Setup Instructions
 
 1. The repository:
-git clone [https://github.com/YOUR-USERNAME/JarnoxStockDashboard.git](https://github.com/ManasP99/JarnoxStockDashboard)
+git clone https://github.com/ManasP99/JarnoxStockDashboard
 
 2. Go to the project folder:
 cd STOCK-DASHBOARD
@@ -31,5 +31,6 @@ frontend/index.html
 - main.py handles backend logic and APIs
 - frontend displays interactive stock dashboard
 - Concepts/usedTopics.txt contains data references
+
 
 
