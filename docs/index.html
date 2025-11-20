@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stock Dashboard — Price Chart (with Compare)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* ---------- Base ---------- */
+    :root{
+      --card-bg: #ffffff;
+      --muted: #6c757d;
+      --accent: #007bff;
+      --info-bg: rgba(175,237,252,0.25);
+    }
+    body {
+      background: #f4f6f9;
+      padding: 22px;
+      transition: background 0.25s, color 0.25s;
+      font-size: 15px;
+    }
+    .dark-mode {
+      background: #141416 !important;
+      color: #e6e6e6 !important;
+    }
+
+    /* ---------- Cards ---------- */
+    .card { background: var(--card-bg); transition: background 0.25s, color 0.25s; }
+    .dark-card { background: #1f1f20 !important; color: #e6e6e6 !important; }
+
+    /* container size & scale */
+    .container { max-width: 1340px; }
+
+    /* header */
+    h1.h4 { font-size: 22px; letter-spacing: .2px; }
+
+    /* ---------- Chart area ---------- */
+    #mainChartCard { margin-top: 1rem; }
+    .card-body { padding: 0.75rem; }
+    #priceChart { display:block; width:100% !important; height:460px !important; max-height:720px; }
+
+    /* ---------- Info area ---------- */
+    .chart-info {
+      margin: 0;
+      background: var(--info-bg);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .chart-info .left { color: #1b3b4f; font-weight:600; }
+    .chart-info .right { color:#1b3b4f; font-weight:700; }
+
+    /* in dark mode make info a bit subtle */
+    .dark-mode .chart-info { background: rgba(30,30,30,0.45); color: #ddd; }
+    .dark-mode .chart-info .left, .dark-mode .chart-info .right { color: #ddd; }
+
+    /* ---------- Filter & layers area ---------- */
+    .filter-btn { font-size: 14px; padding: .45rem .6rem; border-radius:6px; }
+    .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* default outline-dark in light theme */
+    .btn-outline-dark { color: #333; border-color: #bdbdbd; background: #fff; }
+    .btn-outline-dark:hover { background:#f0f0f0; color:#111; }
+
+    /* ensure dropdown button looks consistent */
+    .layers-dropdown .dropdown-menu { min-width: 220px; padding: 8px; border-radius:8px; }
+
+    /* label inside layers */
+    .layers-dropdown label { display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer; color:#333; }
+    .layers-dropdown hr { margin:8px 0; opacity:0.6; }
+
+    /* ---------- Dark mode button fixes ---------- */
+    .dark-mode .btn-outline-dark {
+      /* make outline buttons visible on dark bg */
+      color: #e9eef2 !important;
+      background: rgba(255,255,255,0.03) !important;
+      border-color: rgba(255,255,255,0.12) !important;
+    }
+    .dark-mode .btn-outline-dark:hover {
+      background: rgba(255,255,255,0.05) !important;
+      color: #fff !important;
+    }
+    .dark-mode .btn-outline-dark.active {
+      background: #0b5ed7 !important;
+      color: #fff !important;
+      border-color: #0b5ed7 !important;
+    }
+
+    /* dropdown menu dark mode */
+    .dark-mode .dropdown-menu { background: #222 !important; color: #ddd !important; border-color: rgba(255,255,255,0.06) !important; }
+    .dark-mode .layers-dropdown label { color: #ddd; }
+
+    /* disabled layer toggles style */
+    .layer-toggle[disabled] + span { opacity: 0.5; }
+
+    /* responsive */
+    @media (max-width: 768px) {
+      #priceChart { height: 340px !important; }
+      .card { font-size: 14px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="d-flex justify-content-between align-items-center">
+    <h1 class="h4 fw-bold">Stock Dashboard</h1>
+
+    <!-- DARK MODE TOGGLE -->
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="darkModeToggle">
+      <label class="form-check-label" for="darkModeToggle">Dark Mode</label>
+    </div>
+  </div>
+
+  <!-- CONTROL PANEL -->
+  <div class="card shadow-sm p-3 mt-3" id="controlsCard">
+    <div class="row g-3 align-items-end">
+
+      <div class="col-md-3">
+        <label class="form-label">Choose Stock (A)</label>
+        <select id="symbolSelect" class="form-select">
+          <option value="TCS.NS">TCS.NS</option>
+          <option value="INFY.NS">INFY.NS</option>
+          <option value="RELIANCE.NS">RELIANCE.NS</option>
+          <option value="HDFCBANK.NS">HDFCBANK.NS</option>
+          <option value="SBIN.NS">SBIN.NS</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Or Type (A)</label>
+        <input id="symbolInput" class="form-control" placeholder="e.g., TCS.NS">
+      </div>
+
+      <div class="col-md-2 d-grid">
+        <button id="loadBtn" class="btn btn-primary">Load Chart</button>
+      </div>
+
+      <div class="col-md-2 d-grid">
+        <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
+      </div>
+
+      <!-- Compare controls -->
+      <div class="col-md-2 d-grid">
+        <div class="d-flex gap-2 align-items-center">
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="compareToggle">
+          </div>
+          <select id="symbolCompare" class="form-select" style="min-width:140px;">
+            <option value="INFY.NS">Compare: INFY.NS</option>
+            <option value="TCS.NS">TCS.NS</option>
+            <option value="RELIANCE.NS">RELIANCE.NS</option>
+            <option value="HDFCBANK.NS">HDFCBANK.NS</option>
+            <option value="SBIN.NS">SBIN.NS</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- TIME FILTERS and Layers dropdown -->
+      <div class="col-12 mt-2 d-flex align-items-center justify-content-between flex-wrap">
+        <div class="btn-group" role="group" aria-label="time filters">
+          <button class="btn btn-outline-dark filter-btn" data-days="7">7D</button>
+          <button class="btn btn-outline-dark filter-btn active" data-days="30">30D</button>
+        </div>
+
+        <div class="layers-dropdown">
+          <div class="btn-group">
+            <button class="btn btn-outline-dark dropdown-toggle" data-bs-toggle="dropdown">Data Layers ▾</button>
+            <div class="dropdown-menu dropdown-menu-end p-2">
+              <div><strong>A - Primary</strong></div>
+              <label><input type="checkbox" class="layer-toggle" data-key="A_Close" checked> <span>A Close</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="A_Open" checked> <span>A Open</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="A_High" checked> <span>A High</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="A_Low" checked> <span>A Low</span></label>
+              <hr class="my-2"/>
+              <div><strong>B - Compare</strong></div>
+              <label><input type="checkbox" class="layer-toggle" data-key="B_Close" checked> <span>B Close</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="B_Open"> <span>B Open</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="B_High"> <span>B High</span></label>
+              <label><input type="checkbox" class="layer-toggle" data-key="B_Low"> <span>B Low</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PRICE CHART CARD -->
+  <div class="card shadow-sm mt-4" id="mainChartCard">
+    <div class="card-body">
+      <canvas id="priceChart"></canvas>
+    </div>
+
+    <div class="card-footer">
+      <div id="info" class="chart-info">
+        <div class="left" id="infoText">Select a stock and click <strong>Load Chart</strong>.</div>
+        <div class="right" id="corrText">Correlation: —</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOOTSTRAP JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* === CONFIG - backend base URL === */
+const apiBase = "http://127.0.0.1:8000";
+
+/* === DOM refs === */
+const symbolSelect   = document.getElementById('symbolSelect');
+const symbolInput    = document.getElementById('symbolInput');
+const loadBtn        = document.getElementById('loadBtn');
+const refreshBtn     = document.getElementById('refreshBtn');
+const infoText       = document.getElementById('infoText');
+const corrText       = document.getElementById('corrText');
+const darkToggle     = document.getElementById('darkModeToggle');
+const compareToggle  = document.getElementById('compareToggle');
+const symbolCompare  = document.getElementById('symbolCompare');
+const layerToggles   = document.querySelectorAll('.layer-toggle');
+const filterButtons  = document.querySelectorAll('.filter-btn');
+const ctxPrice       = document.getElementById('priceChart').getContext('2d');
+
+/* === state === */
+let priceChart = null;
+let allRowsA = [];   // primary
+let allRowsB = [];   // compare
+let lastSymbolA = symbolSelect.value;
+let lastSymbolB = symbolCompare.value;
+let compareOn = false;
+let activeLayers = {
+  A_Close: true, A_Open: true, A_High: true, A_Low: true,
+  B_Close: true, B_Open: false, B_High: false, B_Low: false
+};
+let currentDays = 30; // default
+
+/* === helpers === */
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>res.statusText);
+    throw new Error(`HTTP ${res.status} — ${txt}`);
+  }
+  return res.json();
+}
+function toNumber(v){ return v === null ? NaN : Number(v); }
+
+/* align B-series to A's labels (dates). If B missing on a date, produce NaN */
+function alignSeries(primaryRows, secondaryRows, key){
+  const mapB = new Map();
+  for (const r of secondaryRows) mapB.set(r.date, r[key]);
+  return primaryRows.map(r => {
+    const val = mapB.has(r.date) ? mapB.get(r.date) : null;
+    return val === null ? NaN : Number(val);
+  });
+}
+
+/* compute Pearson correlation for Close-close between aligned arrays */
+function pearsonCorrelation(arrX, arrY){
+  const x = [], y = [];
+  for (let i=0;i<arrX.length;i++){
+    const a = Number(arrX[i]), b = Number(arrY[i]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    x.push(a); y.push(b);
+  }
+  if (x.length < 2) return NaN;
+  const mean = arr => arr.reduce((s,v)=>s+v,0)/arr.length;
+  const mx = mean(x), my = mean(y);
+  let num = 0, sx = 0, sy = 0;
+  for (let i=0;i<x.length;i++){
+    const dx = x[i]-mx, dy = y[i]-my;
+    num += dx*dy; sx += dx*dx; sy += dy*dy;
+  }
+  const denom = Math.sqrt(sx*sy);
+  if (denom === 0) return NaN;
+  return num/denom;
+}
+
+function correlationText(r){
+  if (!Number.isFinite(r)) return "Correlation: —";
+  const sign = r >= 0 ? "+" : "";
+  const absR = Math.abs(r);
+  let desc = "Negligible";
+  if (absR >= 0.8) desc = "Strong " + (r>0? "Positive":"Negative");
+  else if (absR >= 0.5) desc = "Moderate " + (r>0? "Positive":"Negative");
+  else if (absR >= 0.2) desc = "Weak " + (r>0? "Positive":"Negative");
+  else desc = "Negligible";
+  return `Correlation (Close–Close): ${sign}${r.toFixed(2)} (${desc})`;
+}
+
+/* build datasets based on activeLayers and compareOn */
+function buildDatasets(rowsA, rowsB, symbolA, symbolB){
+  const labels = rowsA.map(r => r.date);
+  const ds = [];
+
+  const colorsA = {Close:"#007bff", Open:"#00a65a", High:"#ff851b", Low:"#dc3545"};
+  const colorsB = {Close:"#6f42c1", Open:"#20c997", High:"#ffc107", Low:"#ff6b6b"};
+
+  function pushA(key, label, color){
+    if (!activeLayers["A_"+key]) return;
+    ds.push({
+      label: `${symbolA} ${label}`,
+      data: rowsA.map(r => toNumber(r[label])),
+      borderColor: color,
+      borderWidth: label==="Close"?2:1,
+      pointRadius: label==="Close"?2:0,
+      fill: false,
+      tension: 0.08
+    });
+  }
+  function pushB(key, label, color){
+    if (!compareOn || !activeLayers["B_"+key]) return;
+    ds.push({
+      label: `${symbolB} ${label}`,
+      data: alignSeries(rowsA, rowsB, label),
+      borderColor: color,
+      borderWidth: label==="Close"?2:1,
+      borderDash: label==="Close"?[]:[6,4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0.08
+    });
+  }
+
+  pushA("Close","Close", colorsA.Close);
+  pushA("Open","Open", colorsA.Open);
+  pushA("High","High", colorsA.High);
+  pushA("Low","Low", colorsA.Low);
+
+  pushB("Close","Close", colorsB.Close);
+  pushB("Open","Open", colorsB.Open);
+  pushB("High","High", colorsB.High);
+  pushB("Low","Low", colorsB.Low);
+
+  return { labels, datasets: ds };
+}
+
+/* draw chart (recreates chart each time) */
+function drawPriceChart(rowsA, rowsB, symbolA, symbolB){
+  if (!rowsA || rowsA.length === 0) {
+    if (priceChart){ priceChart.destroy(); priceChart = null; }
+    infoText.textContent = "No data to display";
+    corrText.textContent = "Correlation: —";
+    return;
+  }
+
+  const built = buildDatasets(rowsA, rowsB, symbolA, symbolB);
+
+  if (priceChart) priceChart.destroy();
+
+  priceChart = new Chart(ctxPrice, {
+    type: 'line',
+    data: built,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          display: true,
+          title: { display: true, text: 'Date', font: { size: 14, weight: '600' } },
+          ticks: { maxRotation: 45, minRotation: 0 }
+        },
+        y: {
+          display: true,
+          title: { display: true, text: 'Price (INR)', font: { size: 14, weight: '600' } },
+          beginAtZero: false
+        }
+      },
+      layout: { padding: { bottom: 8 } }
+    }
+  });
+
+  // compute correlation Close-Close if compareOn
+  if (compareOn && rowsB.length>0){
+    const closeA = rowsA.map(r => toNumber(r.Close));
+    const closeB_aligned = alignSeries(rowsA, rowsB, "Close");
+    const r = pearsonCorrelation(closeA, closeB_aligned);
+    corrText.textContent = correlationText(r);
+  } else {
+    corrText.textContent = "Correlation: —";
+  }
+
+  const shown = currentDays === 365 ? rowsA.length : Math.min(currentDays, rowsA.length);
+  infoText.innerHTML = `Showing ${shown} records for <strong>${symbolA}</strong>${compareOn ? " + <strong>"+symbolB+"</strong>" : ""}. Last date: <strong>${rowsA[rowsA.length-1].date}</strong>`;
+}
+
+/* --- filter data helpers --- */
+function getFilteredRows(rows, days){
+  if (!rows) return [];
+  if (days === 365) return rows; // full
+  return rows.slice(-days);
+}
+
+/* --- load datasets --- */
+async function loadSymbolA(symbolA, symbolB=null){
+  infoText.textContent = `Loading ${symbolA}...`;
+  try {
+    const rawA = await fetchJSON(`${apiBase}/data/${encodeURIComponent(symbolA)}`);
+    allRowsA = Array.isArray(rawA) ? rawA.slice() : [];
+    lastSymbolA = symbolA;
+
+    if (compareOn && symbolB){
+      const rawB = await fetchJSON(`${apiBase}/data/${encodeURIComponent(symbolB)}`);
+      allRowsB = Array.isArray(rawB) ? rawB.slice() : [];
+      lastSymbolB = symbolB;
+    } else {
+      allRowsB = [];
+    }
+
+    const rowsA = getFilteredRows(allRowsA, currentDays);
+    const rowsB = getFilteredRows(allRowsB, currentDays);
+    drawPriceChart(rowsA, rowsB, lastSymbolA, lastSymbolB);
+
+  } catch (err){
+    console.error(err);
+    infoText.textContent = `Error: ${err.message}`;
+    corrText.textContent = "Correlation: —";
+    allRowsA = []; allRowsB = [];
+    if (priceChart){ priceChart.destroy(); priceChart=null; }
+  }
+}
+
+/* === UI actions === */
+loadBtn.onclick = () => {
+  const typed = symbolInput.value.trim();
+  const symA = typed || symbolSelect.value;
+  const symB = symbolCompare.value;
+  loadSymbolA(symA, compareOn ? symB : null);
+};
+
+refreshBtn.onclick = () => {
+  loadSymbolA(lastSymbolA, compareOn ? lastSymbolB : null);
+};
+
+compareToggle.onchange = () => {
+  compareOn = compareToggle.checked;
+  document.querySelectorAll('.layer-toggle').forEach(cb=>{
+    if (cb.dataset.key.startsWith("B_")){
+      cb.disabled = !compareOn;
+      if (!compareOn) { cb.checked = false; activeLayers[cb.dataset.key] = false; }
+    }
+  });
+  if (compareOn) {
+    lastSymbolB = symbolCompare.value;
+    loadSymbolA(lastSymbolA, lastSymbolB);
+  } else {
+    const rowsA = getFilteredRows(allRowsA, currentDays);
+    drawPriceChart(rowsA, [], lastSymbolA, lastSymbolB);
+  }
+};
+
+layerToggles.forEach(cb=>{
+  cb.onchange = () => {
+    activeLayers[cb.dataset.key] = cb.checked;
+    const rowsA = getFilteredRows(allRowsA, currentDays);
+    const rowsB = getFilteredRows(allRowsB, currentDays);
+    drawPriceChart(rowsA, rowsB, lastSymbolA, lastSymbolB);
+  };
+});
+
+filterButtons.forEach(btn=>{
+  btn.onclick = () => {
+    const days = Number(btn.dataset.days);
+    currentDays = days;
+    const rowsA = getFilteredRows(allRowsA, currentDays);
+    const rowsB = getFilteredRows(allRowsB, currentDays);
+    drawPriceChart(rowsA, rowsB, lastSymbolA, lastSymbolB);
+    filterButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+});
+
+symbolCompare.onchange = () => {
+  if (compareOn) loadSymbolA(lastSymbolA, symbolCompare.value);
+};
+
+/* dark mode toggling */
+darkToggle.onchange = () => {
+  document.body.classList.toggle("dark-mode");
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("dark-card"));
+
+  /* Also ensure outline buttons show correct active style in dark mode */
+  // (CSS handles this; nothing else required)
+};
+
+/* initial load */
+window.addEventListener('load', () => {
+  // disable B-layer toggles initially unless compare is on
+  document.querySelectorAll('.layer-toggle').forEach(cb=>{
+    if (cb.dataset.key.startsWith("B_")){
+      cb.disabled = !compareOn;
+    }
+  });
+  // mark 30D active (default)
+  filterButtons.forEach(b => {
+    if (Number(b.dataset.days) === currentDays) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+  // load
+  loadSymbolA(lastSymbolA, compareOn ? lastSymbolB : null);
+});
+</script>
+</body>
+</html>
